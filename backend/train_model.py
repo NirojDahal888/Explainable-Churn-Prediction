@@ -1,16 +1,14 @@
-"""Train and save five churn models: Random Forest, Logistic Regression, Decision Tree, SVM, and ANN."""
+"""Train and save churn models using Decision Tree, SVM, and ANN."""
 
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC
 
 
 def load_data():
@@ -68,51 +66,7 @@ def evaluate_model(model_name, model, X_eval, y_eval):
     return metrics
 
 
-def train_random_forest(X_train_scaled, y_train):
-    param_grid = {
-        "n_estimators": [100, 200],
-        "max_depth": [None, 10, 20],
-        "min_samples_split": [2, 5],
-    }
-    grid = GridSearchCV(
-        RandomForestClassifier(class_weight="balanced", random_state=42),
-        param_grid,
-        cv=5,
-        scoring="roc_auc",
-        n_jobs=-1,
-    )
-    grid.fit(X_train_scaled, y_train)
-    print(f"Random Forest best params: {grid.best_params_}")
-    return grid.best_estimator_
-
-
-def train_logistic_regression(X_train_scaled, y_train):
-    param_grid = [
-        {
-            "solver": ["lbfgs"],
-            "penalty": ["l2"],
-            "C": [0.1, 1, 10, 100],
-            "class_weight": [None, "balanced"],
-        },
-        {
-            "solver": ["liblinear"],
-            "penalty": ["l1", "l2"],
-            "C": [0.1, 1, 10, 100],
-            "class_weight": [None, "balanced"],
-        },
-    ]
-    grid = GridSearchCV(
-        LogisticRegression(max_iter=2000, random_state=42),
-        param_grid,
-        cv=5,
-        scoring="roc_auc",
-        n_jobs=-1,
-    )
-    grid.fit(X_train_scaled, y_train)
-    print(f"Logistic Regression best params: {grid.best_params_}")
-    return grid.best_estimator_
-
-
+# ------------------ Decision Tree ------------------
 def train_decision_tree(X_train, y_train):
     param_grid = {
         "max_depth": [None, 5, 10, 20],
@@ -120,6 +74,7 @@ def train_decision_tree(X_train, y_train):
         "min_samples_split": [2, 5, 10],
         "criterion": ["gini", "entropy"],
     }
+
     grid = GridSearchCV(
         DecisionTreeClassifier(class_weight="balanced", random_state=42),
         param_grid,
@@ -127,17 +82,20 @@ def train_decision_tree(X_train, y_train):
         scoring="roc_auc",
         n_jobs=-1,
     )
+
     grid.fit(X_train.astype(float), y_train)
     print(f"Decision Tree best params: {grid.best_params_}")
     return grid.best_estimator_
 
 
+# ------------------ SVM ------------------
 def train_svm(X_train_scaled, y_train):
     param_grid = {
         "C": [0.1, 1, 10, 100],
         "kernel": ["linear", "rbf"],
         "gamma": ["scale", "auto"],
     }
+
     grid = GridSearchCV(
         SVC(class_weight="balanced", probability=True, random_state=42),
         param_grid,
@@ -145,11 +103,13 @@ def train_svm(X_train_scaled, y_train):
         scoring="roc_auc",
         n_jobs=-1,
     )
+
     grid.fit(X_train_scaled, y_train)
     print(f"SVM best params: {grid.best_params_}")
     return grid.best_estimator_
 
 
+# ------------------ ANN ------------------
 def train_ann(X_train_scaled, y_train):
     param_grid = {
         "hidden_layer_sizes": [(32, 16), (64, 32)],
@@ -157,6 +117,7 @@ def train_ann(X_train_scaled, y_train):
         "alpha": [0.0001, 0.001],
         "learning_rate_init": [0.001],
     }
+
     grid = GridSearchCV(
         MLPClassifier(
             solver="adam",
@@ -169,6 +130,7 @@ def train_ann(X_train_scaled, y_train):
         scoring="roc_auc",
         n_jobs=-1,
     )
+
     grid.fit(X_train_scaled, y_train)
     print(f"ANN best params: {grid.best_params_}")
     return grid.best_estimator_
@@ -181,23 +143,12 @@ def main():
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # Shared scaled features for RF, Logistic Regression, SVM, and ANN.
-    shared_scaler = StandardScaler()
-    X_train_scaled = shared_scaler.fit_transform(X_train)
-    X_test_scaled = shared_scaler.transform(X_test)
+    # Scaling (for SVM and ANN only)
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
 
-    # Background sample used by SHAP explainers for LR and SVM.
-    np.random.seed(42)
-    bg_idx = np.random.choice(len(X_train_scaled), min(50, len(X_train_scaled)), replace=False)
-    X_background_scaled = X_train_scaled[bg_idx]
-
-    # Baseline (before tuning) models for comparison.
-    rf_baseline = RandomForestClassifier(class_weight="balanced", random_state=42)
-    rf_baseline.fit(X_train_scaled, y_train)
-
-    lr_baseline = LogisticRegression(class_weight="balanced", max_iter=1000, random_state=42)
-    lr_baseline.fit(X_train_scaled, y_train)
-
+    # ---------------- Baseline Models ----------------
     dt_baseline = DecisionTreeClassifier(class_weight="balanced", random_state=42)
     dt_baseline.fit(X_train.astype(float), y_train)
 
@@ -207,54 +158,29 @@ def main():
     ann_baseline = MLPClassifier(max_iter=600, random_state=42)
     ann_baseline.fit(X_train_scaled, y_train)
 
-    print("\nModel Metrics (Before Tuning vs After Tuning):")
-    evaluate_model("Random Forest (Before Tuning)", rf_baseline, X_test_scaled, y_test)
-    evaluate_model("Logistic Regression (Before Tuning)", lr_baseline, X_test_scaled, y_test)
-    evaluate_model("Decision Tree (Before Tuning)", dt_baseline, X_test, y_test)
-    evaluate_model("SVM (Before Tuning)", svm_baseline, X_test_scaled, y_test)
-    evaluate_model("ANN (Before Tuning)", ann_baseline, X_test_scaled, y_test)
+    print("\nBefore Tuning:")
+    evaluate_model("Decision Tree (Before)", dt_baseline, X_test, y_test)
+    evaluate_model("SVM (Before)", svm_baseline, X_test_scaled, y_test)
+    evaluate_model("ANN (Before)", ann_baseline, X_test_scaled, y_test)
 
-    rf_model = train_random_forest(X_train_scaled, y_train)
-    lr_model = train_logistic_regression(X_train_scaled, y_train)
+    # ---------------- Tuned Models ----------------
     dt_model = train_decision_tree(X_train, y_train)
     svm_model = train_svm(X_train_scaled, y_train)
     ann_model = train_ann(X_train_scaled, y_train)
 
-    evaluate_model("Random Forest (After Tuning)", rf_model, X_test_scaled, y_test)
-    evaluate_model("Logistic Regression (After Tuning)", lr_model, X_test_scaled, y_test)
-    evaluate_model("Decision Tree (After Tuning)", dt_model, X_test, y_test)
-    evaluate_model("SVM (After Tuning)", svm_model, X_test_scaled, y_test)
-    evaluate_model("ANN (After Tuning)", ann_model, X_test_scaled, y_test)
+    print("\nAfter Tuning:")
+    evaluate_model("Decision Tree (After)", dt_model, X_test, y_test)
+    evaluate_model("SVM (After)", svm_model, X_test_scaled, y_test)
+    evaluate_model("ANN (After)", ann_model, X_test_scaled, y_test)
 
-    print("\nFinal Saved Model Metrics:")
-    evaluate_model("Random Forest", rf_model, X_test_scaled, y_test)
-    evaluate_model("Logistic Regression", lr_model, X_test_scaled, y_test)
-    evaluate_model("Decision Tree", dt_model, X_test, y_test)
-    evaluate_model("SVM", svm_model, X_test_scaled, y_test)
-    evaluate_model("ANN", ann_model, X_test_scaled, y_test)
-
-    joblib.dump(rf_model, "rf_model.pkl")
-    joblib.dump(shared_scaler, "rf_scaler.pkl")
-    # Backward compatibility with previous backend version.
-    joblib.dump(shared_scaler, "scaler.pkl")
-
-    joblib.dump(lr_model, "lr_model.pkl")
-    joblib.dump(shared_scaler, "lr_scaler.pkl")
-
+    # ---------------- Save Models ----------------
     joblib.dump(dt_model, "dt_model.pkl")
-
     joblib.dump(svm_model, "svm_model.pkl")
-    joblib.dump(shared_scaler, "svm_scaler.pkl")
-
     joblib.dump(ann_model, "ann_model.pkl")
-    joblib.dump(shared_scaler, "ann_scaler.pkl")
-
+    joblib.dump(scaler, "scaler.pkl")
     joblib.dump(selected_features, "features.pkl")
-    joblib.dump(X_background_scaled, "shap_background_scaled.pkl")
 
-    print("Saved: rf_model.pkl, lr_model.pkl, dt_model.pkl, svm_model.pkl, ann_model.pkl")
-    print("Saved: rf_scaler.pkl, lr_scaler.pkl, svm_scaler.pkl, ann_scaler.pkl, scaler.pkl")
-    print("Saved: features.pkl, shap_background_scaled.pkl")
+    print("Saved: dt_model.pkl, svm_model.pkl, ann_model.pkl, scaler.pkl, features.pkl")
 
 
 if __name__ == "__main__":
