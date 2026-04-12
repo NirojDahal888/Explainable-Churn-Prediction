@@ -2,16 +2,12 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from decision_tree_model import DecisionTreeModel
-from svm_model import SvmModel
 from ann_model import AnnModel
-from logistic_model import LogisticRegressionModel
 
 app = FastAPI(title="Churn Prediction API", version="1.0.0")
 
 dt_model = DecisionTreeModel()
-svm_model = SvmModel()
 ann_model = AnnModel()
-lr_model = LogisticRegressionModel()
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,9 +19,9 @@ app.add_middleware(
 
 
 class Customer(BaseModel):
-    tenure: float = Field(..., ge=0)
-    MonthlyCharges: float = Field(..., ge=0)
-    TotalCharges: float = Field(..., ge=0)
+    tenure: float = Field(..., ge=0, description="Months the customer has stayed")
+    MonthlyCharges: float = Field(..., ge=0, description="Monthly charge amount")
+    TotalCharges: float = Field(..., ge=0, description="Total charges")
     InternetService_Fiber_optic: int = Field(..., ge=0, le=1)
     PaymentMethod_Electronic_check: int = Field(..., ge=0, le=1)
     Contract_Two_year: int = Field(..., ge=0, le=1)
@@ -59,12 +55,10 @@ def predict(customer: Customer):
     features = customer.dict()
 
     dt_result = dt_model.predict(features)
-    svm_result = svm_model.predict(features)
     ann_result = ann_model.predict(features)
-    lr_result = lr_model.predict(features)
 
     # Add recommendations
-    for model_result in [dt_result, svm_result, ann_result, lr_result]:
+    for model_result in [dt_result, ann_result]:
         rec = get_action_recommendation(model_result.get("confidence", 0))
         model_result["risk_level"] = rec["risk_level"]
         model_result["action_recommendation"] = rec["recommendation"]
@@ -85,8 +79,6 @@ def predict(customer: Customer):
         "recommendation_color": top_rec["color"],
         "models": {
             "decision_tree": dt_result,
-            "svm": svm_result,
             "ann": ann_result,
-            "logistic_regression": lr_result,
         },
     }
