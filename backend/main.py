@@ -4,12 +4,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from decision_tree_model import DecisionTreeModel
 from svm_model import SvmModel
 from ann_model import AnnModel
+from logistic_model import LogisticRegressionModel
 
 app = FastAPI(title="Churn Prediction API", version="1.0.0")
 
 dt_model = DecisionTreeModel()
 svm_model = SvmModel()
 ann_model = AnnModel()
+lr_model = LogisticRegressionModel()
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,9 +61,10 @@ def predict(customer: Customer):
     dt_result = dt_model.predict(features)
     svm_result = svm_model.predict(features)
     ann_result = ann_model.predict(features)
+    lr_result = lr_model.predict(features)
 
     # Add recommendations
-    for model_result in [dt_result, svm_result, ann_result]:
+    for model_result in [dt_result, svm_result, ann_result, lr_result]:
         rec = get_action_recommendation(model_result.get("confidence", 0))
         model_result["risk_level"] = rec["risk_level"]
         model_result["action_recommendation"] = rec["recommendation"]
@@ -84,5 +87,6 @@ def predict(customer: Customer):
             "decision_tree": dt_result,
             "svm": svm_result,
             "ann": ann_result,
+            "logistic_regression": lr_result,
         },
     }
